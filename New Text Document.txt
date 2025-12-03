@@ -1,0 +1,940 @@
+CREATE DATABASE SupplyChainDB;
+GO
+USE SupplyChainDB;
+GO
+
+
+SELECT * INTO SupplyChainDB.dbo.MyTable
+FROM master.dbo.MyTable;
+
+
+USE master;
+DROP TABLE dbo.MyTable;
+
+
+
+
+
+
+BEGIN TRAN;
+
+UPDATE dbo.MyTable
+SET Price               = ROUND(Price, 2),
+    Revenue_generated   = ROUND(Revenue_generated, 2),
+    Expected_Revenue    = ROUND(Expected_Revenue, 2),
+    Revenue_Deviation   = ROUND(Revenue_Deviation, 2),
+    Costs               = ROUND(Costs, 2),
+    Expected_Costs      = ROUND(Expected_Costs, 2),
+    Cost_Deviation      = ROUND(Cost_Deviation, 2),
+    Manufacturing_costs = ROUND(Manufacturing_costs, 2),
+    Shipping_costs      = ROUND(Shipping_costs, 2),
+    Net_profit          = ROUND(Net_profit, 2);
+
+UPDATE dbo.MyTable
+SET Defect_rates = ROUND(Defect_rates, 4);
+
+ALTER TABLE dbo.MyTable ALTER COLUMN Price               DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Revenue_generated   DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Expected_Revenue    DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Revenue_Deviation   DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Costs               DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Expected_Costs      DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Cost_Deviation      DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Manufacturing_costs DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Shipping_costs      DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Net_profit          DECIMAL(18,2) NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Defect_rates        DECIMAL(9,4)  NULL;
+
+COMMIT TRAN;
+
+
+
+
+
+
+
+
+
+SELECT 
+  c.name AS column_name, t.name AS data_type, c.max_length, c.scale, c.precision
+FROM sys.columns c
+JOIN sys.types t ON c.user_type_id = t.user_type_id
+WHERE c.object_id = OBJECT_ID('dbo.MyTable')
+  AND c.name IN ('Price','Revenue_generated','Expected_Revenue','Revenue_Deviation',
+                 'Costs','Expected_Costs','Cost_Deviation','Manufacturing_costs',
+                 'Shipping_costs','Net_profit','Defect_rates')
+ORDER BY c.name;
+
+
+
+
+
+
+SELECT 
+  MAX(LEN(SKU))                   AS max_len_SKU,
+  MAX(LEN(Product_type))          AS max_len_Product_type,
+  MAX(LEN(Customer_demographics)) AS max_len_Customer_demographics,
+  MAX(LEN(Supplier_name))         AS max_len_Supplier_name,
+  MAX(LEN([Location]))            AS max_len_Location,
+  MAX(LEN(Shipping_carriers))     AS max_len_Shipping_carriers,
+  MAX(LEN(Transportation_modes))  AS max_len_Transportation_modes,
+  MAX(LEN(Routes))                AS max_len_Routes,
+  MAX(LEN(Inspection_results))    AS max_len_Inspection_results
+FROM dbo.MyTable;
+
+
+
+
+
+
+
+
+BEGIN TRAN;
+
+ALTER TABLE dbo.MyTable ALTER COLUMN SKU                   NVARCHAR(50)   NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Product_type          NVARCHAR(50)   NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Customer_demographics NVARCHAR(100)  NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Supplier_name         NVARCHAR(100)  NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN [Location]            NVARCHAR(100)  NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Shipping_carriers     NVARCHAR(50)   NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Transportation_modes  NVARCHAR(50)   NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Routes                NVARCHAR(100)  NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Inspection_results    NVARCHAR(50)   NULL;
+
+COMMIT TRAN;
+
+
+
+
+
+
+
+SELECT 
+    COLUMN_NAME      AS [??? ??????],
+    DATA_TYPE        AS [??? ????????],
+    CHARACTER_MAXIMUM_LENGTH AS [???? ??? ????]
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'MyTable'
+  AND COLUMN_NAME IN (
+        'SKU',
+        'Product_type',
+        'Customer_demographics',
+        'Supplier_name',
+        'Location',
+        'Shipping_carriers',
+        'Transportation_modes',
+        'Routes',
+        'Inspection_results'
+  )
+ORDER BY COLUMN_NAME;
+
+
+
+
+
+
+
+
+
+BEGIN TRAN;
+
+-- 1) ????? ??????? ??? INT (????)
+ALTER TABLE dbo.MyTable ALTER COLUMN Manufacturing_lead_time INT NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Lead_time               INT NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Shipping_times          INT NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Lead_times              INT NULL;
+ALTER TABLE dbo.MyTable ALTER COLUMN Delay                   INT NULL;
+
+
+
+
+
+
+
+
+IF OBJECT_ID(N'dbo.Dim_Product', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Dim_Product (
+    Product_Key  INT IDENTITY(1,1) PRIMARY KEY,
+    SKU          NVARCHAR(50)  NOT NULL,
+    Product_type NVARCHAR(50)  NOT NULL,
+    [Availability] INT         NULL
+  );
+
+  CREATE UNIQUE INDEX UX_Dim_Product_SKU_Type
+    ON dbo.Dim_Product (SKU, Product_type);
+END;
+
+
+
+
+
+
+INSERT INTO dbo.Dim_Product (SKU, Product_type, [Availability])
+SELECT DISTINCT
+  LTRIM(RTRIM(SKU)),
+  LTRIM(RTRIM(Product_type)),
+  Availability
+FROM dbo.MyTable
+WHERE SKU IS NOT NULL AND Product_type IS NOT NULL;
+
+
+
+
+
+
+ALTER TABLE dbo.Dim_Product DROP COLUMN [Availability];
+DROP INDEX UX_Dim_Product_SKU_Type ON dbo.Dim_Product;  -- ?? ????? ???????
+CREATE UNIQUE INDEX UX_Dim_Product_SKU_Type
+  ON dbo.Dim_Product (SKU, Product_type);
+
+
+
+
+
+
+
+  INSERT INTO dbo.Dim_Product (SKU, Product_type)
+SELECT DISTINCT
+  LTRIM(RTRIM(SKU)),
+  LTRIM(RTRIM(Product_type))
+FROM dbo.MyTable
+WHERE SKU IS NOT NULL AND Product_type IS NOT NULL;
+
+
+
+
+
+
+
+
+
+-- 1) ????? ????? (?? ?? ?????)
+IF OBJECT_ID(N'dbo.Dim_Supplier', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Dim_Supplier (
+    Supplier_Key  INT IDENTITY(1,1) PRIMARY KEY,
+    Supplier_name NVARCHAR(100) NOT NULL,
+    [Location]    NVARCHAR(100) NULL
+  );
+
+  CREATE UNIQUE INDEX UX_Dim_Supplier_Name_Location
+    ON dbo.Dim_Supplier (Supplier_name, [Location]);
+END;
+
+-- 2) ????? ?? ?????? ??????
+INSERT INTO dbo.Dim_Supplier (Supplier_name, [Location])
+SELECT DISTINCT
+  LTRIM(RTRIM(Supplier_name)),
+  LTRIM(RTRIM([Location]))
+FROM dbo.MyTable
+WHERE Supplier_name IS NOT NULL;
+
+
+
+
+
+
+
+
+SELECT COUNT(*) AS supplier_rows FROM dbo.Dim_Supplier;
+SELECT TOP 10 * FROM dbo.Dim_Supplier ORDER BY Supplier_Key;
+
+
+
+
+
+
+
+
+
+
+-- 1) ????? ????? (?? ??? ?????)
+IF OBJECT_ID(N'dbo.Dim_Customer', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Dim_Customer (
+    Customer_Key           INT IDENTITY(1,1) PRIMARY KEY,
+    Customer_demographics  NVARCHAR(100) NOT NULL
+  );
+
+  CREATE UNIQUE INDEX UX_Dim_Customer_Demo
+    ON dbo.Dim_Customer (Customer_demographics);
+END;
+
+-- 2) ????? ?? ?????? ??????
+INSERT INTO dbo.Dim_Customer (Customer_demographics)
+SELECT DISTINCT
+  LTRIM(RTRIM(Customer_demographics))
+FROM dbo.MyTable
+WHERE Customer_demographics IS NOT NULL;
+
+
+
+SELECT COUNT(*) AS customer_rows FROM dbo.Dim_Customer;
+SELECT TOP 10 * FROM dbo.Dim_Customer ORDER BY Customer_Key;
+
+
+
+
+
+
+
+
+
+-- ????? ????? (?? ??? ?????)
+IF OBJECT_ID(N'dbo.Dim_Shipping', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Dim_Shipping (
+    Shipping_Key         INT IDENTITY(1,1) PRIMARY KEY,
+    Shipping_carriers    NVARCHAR(50)  NULL,
+    Transportation_modes NVARCHAR(50)  NULL,
+    Routes               NVARCHAR(100) NULL
+  );
+
+  CREATE UNIQUE INDEX UX_Dim_Shipping_Carrier_Mode_Route
+    ON dbo.Dim_Shipping (Shipping_carriers, Transportation_modes, Routes);
+END;
+
+-- ??????? ?? ?????? ??????
+INSERT INTO dbo.Dim_Shipping (Shipping_carriers, Transportation_modes, Routes)
+SELECT DISTINCT
+  LTRIM(RTRIM(Shipping_carriers)),
+  LTRIM(RTRIM(Transportation_modes)),
+  LTRIM(RTRIM(Routes))
+FROM dbo.MyTable
+WHERE Shipping_carriers IS NOT NULL
+   OR Transportation_modes IS NOT NULL
+   OR Routes IS NOT NULL;
+
+
+
+
+SELECT COUNT(*) AS shipping_rows FROM dbo.Dim_Shipping;
+SELECT TOP 10 * FROM dbo.Dim_Shipping ORDER BY Shipping_Key;
+
+
+
+
+
+
+
+
+
+
+
+-- ????? ????? (?? ??? ?????)
+IF OBJECT_ID(N'dbo.Dim_Date', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Dim_Date (
+    Date_Key     INT      PRIMARY KEY,   -- ????: 20251112
+    [Date]       DATE     NOT NULL,
+    [Year]       INT      NULL,
+    [Quarter]    TINYINT  NULL,
+    [Month]      TINYINT  NULL,
+    [Day]        TINYINT  NULL,
+    [WeekOfYear] TINYINT  NULL
+  );
+END;
+
+;WITH D AS (
+  SELECT DISTINCT T.[Date]
+  FROM dbo.MyTable AS T
+  WHERE T.[Date] IS NOT NULL
+)
+INSERT INTO dbo.Dim_Date (Date_Key, [Date], [Year], [Quarter], [Month], [Day], [WeekOfYear])
+SELECT 
+    (YEAR(D.[Date]) * 10000) + (MONTH(D.[Date]) * 100) + DAY(D.[Date]) AS Date_Key,
+    D.[Date],
+    YEAR(D.[Date])                           AS [Year],
+    DATEPART(QUARTER, D.[Date])              AS [Quarter],
+    MONTH(D.[Date])                          AS [Month],
+    DAY(D.[Date])                            AS [Day],
+    DATEPART(ISO_WEEK, D.[Date])             AS [WeekOfYear]
+FROM D
+LEFT JOIN dbo.Dim_Date DD
+       ON DD.Date_Key = (YEAR(D.[Date]) * 10000) + (MONTH(D.[Date]) * 100) + DAY(D.[Date])
+WHERE DD.Date_Key IS NULL;  -- ???? ???????? ??? ???????? ???
+
+
+
+
+
+
+
+
+
+
+IF OBJECT_ID(N'dbo.vw_MyTable_WithKeys', N'V') IS NOT NULL
+    DROP VIEW dbo.vw_MyTable_WithKeys;
+GO
+
+CREATE VIEW dbo.vw_MyTable_WithKeys
+AS
+SELECT
+    T.*,
+
+    -- ?????? ???????
+    P.Product_Key,
+    S.Supplier_Key,
+    C.Customer_Key,
+    SH.Shipping_Key,
+    D.Date_Key
+
+FROM dbo.MyTable AS T
+LEFT JOIN dbo.Dim_Product  AS P
+       ON P.SKU = LTRIM(RTRIM(T.SKU))
+      AND P.Product_type = LTRIM(RTRIM(T.Product_type))
+LEFT JOIN dbo.Dim_Supplier AS S
+       ON S.Supplier_name = LTRIM(RTRIM(T.Supplier_name))
+      AND S.[Location]    = LTRIM(RTRIM(T.[Location]))
+LEFT JOIN dbo.Dim_Customer AS C
+       ON C.Customer_demographics = LTRIM(RTRIM(T.Customer_demographics))
+LEFT JOIN dbo.Dim_Shipping AS SH
+       ON SH.Shipping_carriers    = LTRIM(RTRIM(T.Shipping_carriers))
+      AND SH.Transportation_modes = LTRIM(RTRIM(T.Transportation_modes))
+      AND SH.Routes               = LTRIM(RTRIM(T.Routes))
+LEFT JOIN dbo.Dim_Date AS D
+       ON D.[Date] = T.[Date];
+GO
+
+
+
+
+
+
+SELECT TOP 10 Product_Key, Supplier_Key, Customer_Key, Shipping_Key, Date_Key
+FROM dbo.vw_MyTable_WithKeys
+WHERE Product_Key IS NULL 
+   OR Supplier_Key IS NULL 
+   OR Customer_Key IS NULL 
+   OR Shipping_Key IS NULL 
+   OR Date_Key IS NULL;
+
+
+
+
+
+
+
+
+
+
+   IF OBJECT_ID(N'dbo.Fact_SupplyChain', N'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.Fact_SupplyChain (
+    Fact_Key                 BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+    -- ?????? ???????
+    Product_Key              INT NOT NULL,
+    Supplier_Key             INT NULL,
+    Customer_Key             INT NULL,
+    Shipping_Key             INT NULL,
+    Date_Key                 INT NOT NULL,
+
+    -- ???????? (?? MyTable)
+    Number_of_products_sold  INT             NULL,
+    Order_quantities         INT             NULL,
+    Price                    DECIMAL(18,2)   NULL,
+    Revenue_generated        DECIMAL(18,2)   NULL,
+    Expected_Revenue         DECIMAL(18,2)   NULL,
+    Revenue_Deviation        DECIMAL(18,2)   NULL,
+    Costs                    DECIMAL(18,2)   NULL,
+    Expected_Costs           DECIMAL(18,2)   NULL,
+    Cost_Deviation           DECIMAL(18,2)   NULL,
+    Manufacturing_costs      DECIMAL(18,2)   NULL,
+    Shipping_costs           DECIMAL(18,2)   NULL,
+    Net_profit               DECIMAL(18,2)   NULL,
+
+    Stock_levels             INT             NULL,
+    Production_volumes       INT             NULL,
+
+    Manufacturing_lead_time  INT             NULL,
+    Lead_time                INT             NULL,
+    Shipping_times           INT             NULL,
+    Lead_times               INT             NULL,
+    Delay                    INT             NULL,
+
+    Defect_rates             DECIMAL(9,4)    NULL,
+
+    -- ??????
+    CONSTRAINT FK_Fact_Product   FOREIGN KEY (Product_Key)  REFERENCES dbo.Dim_Product(Product_Key),
+    CONSTRAINT FK_Fact_Supplier  FOREIGN KEY (Supplier_Key) REFERENCES dbo.Dim_Supplier(Supplier_Key),
+    CONSTRAINT FK_Fact_Customer  FOREIGN KEY (Customer_Key) REFERENCES dbo.Dim_Customer(Customer_Key),
+    CONSTRAINT FK_Fact_Shipping  FOREIGN KEY (Shipping_Key) REFERENCES dbo.Dim_Shipping(Shipping_Key),
+    CONSTRAINT FK_Fact_Date      FOREIGN KEY (Date_Key)     REFERENCES dbo.Dim_Date(Date_Key)
+  );
+
+  -- ????? ??? ?????? ????? ?????? ??????
+  CREATE INDEX IX_Fact_Product   ON dbo.Fact_SupplyChain(Product_Key);
+  CREATE INDEX IX_Fact_Supplier  ON dbo.Fact_SupplyChain(Supplier_Key);
+  CREATE INDEX IX_Fact_Customer  ON dbo.Fact_SupplyChain(Customer_Key);
+  CREATE INDEX IX_Fact_Shipping  ON dbo.Fact_SupplyChain(Shipping_Key);
+  CREATE INDEX IX_Fact_Date      ON dbo.Fact_SupplyChain(Date_Key);
+END
+
+
+
+
+
+
+INSERT INTO dbo.Fact_SupplyChain (
+  Product_Key, Supplier_Key, Customer_Key, Shipping_Key, Date_Key,
+  Number_of_products_sold, Order_quantities, Price,
+  Revenue_generated, Expected_Revenue, Revenue_Deviation,
+  Costs, Expected_Costs, Cost_Deviation,
+  Manufacturing_costs, Shipping_costs, Net_profit,
+  Stock_levels, Production_volumes,
+  Manufacturing_lead_time, Lead_time, Shipping_times, Lead_times, Delay,
+  Defect_rates
+)
+SELECT
+  Product_Key, Supplier_Key, Customer_Key, Shipping_Key, Date_Key,
+  T.Number_of_products_sold, T.Order_quantities, T.Price,
+  T.Revenue_generated, T.Expected_Revenue, T.Revenue_Deviation,
+  T.Costs, T.Expected_Costs, T.Cost_Deviation,
+  T.Manufacturing_costs, T.Shipping_costs, T.Net_profit,
+  T.Stock_levels, T.Production_volumes,
+  T.Manufacturing_lead_time, T.Lead_time, T.Shipping_times, T.Lead_times, T.Delay,
+  T.Defect_rates
+FROM dbo.vw_MyTable_WithKeys AS T;
+
+
+
+
+
+
+SELECT COUNT(*) AS fact_rows FROM dbo.Fact_SupplyChain;
+SELECT TOP 5 * FROM dbo.Fact_SupplyChain;
+
+
+
+
+
+
+
+
+
+
+
+-- ???? ????? ?????? ?????
+USE SupplyChainDB;
+GO
+
+-- ???? ?? ??????? ?? ????????? ?????? ???????
+SELECT s.name AS schema_name, t.name AS table_name, t.create_date
+FROM sys.tables t
+JOIN sys.schemas s ON t.schema_id = s.schema_id
+ORDER BY t.create_date DESC;
+
+-- ???? ???Views ?????? ?? vw_MyTable_WithKeys
+SELECT s.name AS schema_name, v.name AS view_name, v.create_date
+FROM sys.views v
+JOIN sys.schemas s ON v.schema_id = s.schema_id
+ORDER BY v.create_date DESC;
+
+
+
+
+
+
+-- 1) ?? ?? ??????? ?????? ??????
+IF @@TRANCOUNT > 0
+BEGIN
+  PRINT 'Rolling back open transaction(s) before backup...';
+  WHILE @@TRANCOUNT > 0 ROLLBACK TRAN;
+END;
+
+-- ???? ?? ??????? ???????? ????????? ????
+SET IMPLICIT_TRANSACTIONS OFF;
+GO
+
+-- 2) ???? ????? ????????? ?? Batch ?????
+USE master;  -- ??????? ??? ????
+GO
+BACKUP DATABASE SupplyChainDB
+TO DISK = 'F:\course\SupplyChainDB_Final2.bak'
+WITH INIT, NAME = 'Full Backup with Dimensions & Fact';
+GO
+
+
+
+
+
+
+-- 1) ?????? ?????? ?????? ??????????
+DECLARE @data nvarchar(4000) = CAST(SERVERPROPERTY('InstanceDefaultDataPath') AS nvarchar(4000));
+DECLARE @log  nvarchar(4000) = CAST(SERVERPROPERTY('InstanceDefaultLogPath')  AS nvarchar(4000));
+
+-- 2) ???? ????? ????????? ??????????
+DECLARE @sql nvarchar(max) =
+N'RESTORE DATABASE SupplyChainDB_Test2
+FROM DISK = N''F:\course\SupplyChainDB_Final2.bak''
+WITH 
+  MOVE N''SupplyChainDB''     TO N''' + @data + N'SupplyChainDB_Test2.mdf'',
+  MOVE N''SupplyChainDB_log'' TO N''' + @log  + N'SupplyChainDB_Test2.ldf'',
+  REPLACE, RECOVERY;';
+
+-- (???????) ???? ??????
+PRINT @sql;
+
+-- 3) ????
+EXEC(@sql);
+
+
+
+
+USE SupplyChainDB_Test2;
+GO
+
+SELECT name 
+FROM sys.tables
+WHERE name IN ('Dim_Product','Dim_Supplier','Dim_Customer','Dim_Shipping','Dim_Date','Fact_SupplyChain','MyTable')
+ORDER BY name;
+
+SELECT name 
+FROM sys.views
+WHERE name = 'vw_MyTable_WithKeys';
+
+
+
+
+
+
+USE SupplyChainDB;
+SELECT name FROM sys.tables
+WHERE name IN ('Dim_Product','Dim_Supplier','Dim_Customer','Dim_Shipping','Dim_Date','Fact_SupplyChain','MyTable')
+ORDER BY name;
+
+SELECT name FROM sys.views
+WHERE name = 'vw_MyTable_WithKeys';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* =========================================================
+   SupplyChainDB — Rebuild Star Schema (Dims + View + Fact)
+   ========================================================= */
+USE SupplyChainDB;
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+
+BEGIN TRAN;
+
+------------------------------------------------------------
+-- 0) ????? ?? ??? (????? ???????: View -> Fact -> Dims)
+------------------------------------------------------------
+IF OBJECT_ID(N'dbo.vw_MyTable_WithKeys', N'V') IS NOT NULL
+  DROP VIEW dbo.vw_MyTable_WithKeys;
+
+IF OBJECT_ID(N'dbo.Fact_SupplyChain', N'U') IS NOT NULL
+  DROP TABLE dbo.Fact_SupplyChain;
+
+IF OBJECT_ID(N'dbo.Dim_Date', N'U') IS NOT NULL       DROP TABLE dbo.Dim_Date;
+IF OBJECT_ID(N'dbo.Dim_Shipping', N'U') IS NOT NULL    DROP TABLE dbo.Dim_Shipping;
+IF OBJECT_ID(N'dbo.Dim_Customer', N'U') IS NOT NULL    DROP TABLE dbo.Dim_Customer;
+IF OBJECT_ID(N'dbo.Dim_Supplier', N'U') IS NOT NULL    DROP TABLE dbo.Dim_Supplier;
+IF OBJECT_ID(N'dbo.Dim_Product', N'U') IS NOT NULL     DROP TABLE dbo.Dim_Product;
+
+------------------------------------------------------------
+-- 1) ????? ???????
+------------------------------------------------------------
+
+-- 1.1 Dim_Product (???? Availability? ????? ????? SKU+Product_type)
+CREATE TABLE dbo.Dim_Product (
+  Product_Key   INT IDENTITY(1,1) PRIMARY KEY,
+  SKU           NVARCHAR(50)  NOT NULL,
+  Product_type  NVARCHAR(50)  NOT NULL
+);
+CREATE UNIQUE INDEX UX_Dim_Product_SKU_Type
+  ON dbo.Dim_Product (SKU, Product_type);
+
+-- ?????
+INSERT INTO dbo.Dim_Product (SKU, Product_type)
+SELECT DISTINCT
+  LTRIM(RTRIM(SKU))          AS SKU,
+  LTRIM(RTRIM(Product_type)) AS Product_type
+FROM dbo.MyTable
+WHERE SKU IS NOT NULL AND Product_type IS NOT NULL;
+
+-- 1.2 Dim_Supplier
+CREATE TABLE dbo.Dim_Supplier (
+  Supplier_Key   INT IDENTITY(1,1) PRIMARY KEY,
+  Supplier_name  NVARCHAR(100) NOT NULL,
+  [Location]     NVARCHAR(100) NULL
+);
+CREATE UNIQUE INDEX UX_Dim_Supplier_Name_Location
+  ON dbo.Dim_Supplier (Supplier_name, [Location]);
+
+INSERT INTO dbo.Dim_Supplier (Supplier_name, [Location])
+SELECT DISTINCT
+  LTRIM(RTRIM(Supplier_name)),
+  LTRIM(RTRIM([Location]))
+FROM dbo.MyTable
+WHERE Supplier_name IS NOT NULL;
+
+-- 1.3 Dim_Customer
+CREATE TABLE dbo.Dim_Customer (
+  Customer_Key           INT IDENTITY(1,1) PRIMARY KEY,
+  Customer_demographics  NVARCHAR(100) NOT NULL
+);
+CREATE UNIQUE INDEX UX_Dim_Customer_Demo
+  ON dbo.Dim_Customer (Customer_demographics);
+
+INSERT INTO dbo.Dim_Customer (Customer_demographics)
+SELECT DISTINCT
+  LTRIM(RTRIM(Customer_demographics))
+FROM dbo.MyTable
+WHERE Customer_demographics IS NOT NULL;
+
+-- 1.4 Dim_Shipping (???? Shipping_times? ???? ????? ??????)
+CREATE TABLE dbo.Dim_Shipping (
+  Shipping_Key          INT IDENTITY(1,1) PRIMARY KEY,
+  Shipping_carriers     NVARCHAR(50)  NULL,
+  Transportation_modes  NVARCHAR(50)  NULL,
+  Routes                NVARCHAR(100) NULL
+);
+CREATE UNIQUE INDEX UX_Dim_Shipping_Carrier_Mode_Route
+  ON dbo.Dim_Shipping (Shipping_carriers, Transportation_modes, Routes);
+
+INSERT INTO dbo.Dim_Shipping (Shipping_carriers, Transportation_modes, Routes)
+SELECT DISTINCT
+  LTRIM(RTRIM(Shipping_carriers)),
+  LTRIM(RTRIM(Transportation_modes)),
+  LTRIM(RTRIM(Routes))
+FROM dbo.MyTable
+WHERE Shipping_carriers IS NOT NULL
+   OR Transportation_modes IS NOT NULL
+   OR Routes IS NOT NULL;
+
+-- 1.5 Dim_Date
+CREATE TABLE dbo.Dim_Date (
+  Date_Key     INT       PRIMARY KEY,   -- yyyyMMdd
+  [Date]       DATE      NOT NULL,
+  [Year]       INT       NULL,
+  [Quarter]    TINYINT   NULL,
+  [Month]      TINYINT   NULL,
+  [Day]        TINYINT   NULL,
+  [WeekOfYear] TINYINT   NULL
+);
+
+;WITH D AS (
+  SELECT DISTINCT T.[Date]
+  FROM dbo.MyTable AS T
+  WHERE T.[Date] IS NOT NULL
+)
+INSERT INTO dbo.Dim_Date (Date_Key, [Date], [Year], [Quarter], [Month], [Day], [WeekOfYear])
+SELECT 
+    (YEAR(D.[Date]) * 10000) + (MONTH(D.[Date]) * 100) + DAY(D.[Date]) AS Date_Key,
+    D.[Date],
+    YEAR(D.[Date]),
+    DATEPART(QUARTER, D.[Date]),
+    MONTH(D.[Date]),
+    DAY(D.[Date]),
+    DATEPART(ISO_WEEK, D.[Date])
+FROM D;
+
+------------------------------------------------------------
+-- 2) View ??? ?????? ??????? ???????
+------------------------------------------------------------
+CREATE VIEW dbo.vw_MyTable_WithKeys
+AS
+SELECT
+  T.*,
+  P.Product_Key,
+  S.Supplier_Key,
+  C.Customer_Key,
+  SH.Shipping_Key,
+  D.Date_Key
+FROM dbo.MyTable AS T
+LEFT JOIN dbo.Dim_Product  AS P
+       ON P.SKU          = LTRIM(RTRIM(T.SKU))
+      AND P.Product_type = LTRIM(RTRIM(T.Product_type))
+LEFT JOIN dbo.Dim_Supplier AS S
+       ON S.Supplier_name = LTRIM(RTRIM(T.Supplier_name))
+      AND S.[Location]    = LTRIM(RTRIM(T.[Location]))
+LEFT JOIN dbo.Dim_Customer AS C
+       ON C.Customer_demographics = LTRIM(RTRIM(T.Customer_demographics))
+LEFT JOIN dbo.Dim_Shipping  AS SH
+       ON SH.Shipping_carriers    = LTRIM(RTRIM(T.Shipping_carriers))
+      AND SH.Transportation_modes = LTRIM(RTRIM(T.Transportation_modes))
+      AND SH.Routes               = LTRIM(RTRIM(T.Routes))
+LEFT JOIN dbo.Dim_Date AS D
+       ON D.[Date] = T.[Date];
+GO
+
+------------------------------------------------------------
+-- 3) ???? ??????? + ???????
+------------------------------------------------------------
+USE SupplyChainDB;
+BEGIN TRAN;
+
+CREATE TABLE dbo.Fact_SupplyChain (
+  Fact_Key                 BIGINT IDENTITY(1,1) PRIMARY KEY,
+
+  -- ?????? ???????
+  Product_Key              INT NOT NULL,
+  Supplier_Key             INT NULL,
+  Customer_Key             INT NULL,
+  Shipping_Key             INT NULL,
+  Date_Key                 INT NOT NULL,
+
+  -- ????????
+  Number_of_products_sold  INT            NULL,
+  Order_quantities         INT            NULL,
+  Price                    DECIMAL(18,2)  NULL,
+  Revenue_generated        DECIMAL(18,2)  NULL,
+  Expected_Revenue         DECIMAL(18,2)  NULL,
+  Revenue_Deviation        DECIMAL(18,2)  NULL,
+  Costs                    DECIMAL(18,2)  NULL,
+  Expected_Costs           DECIMAL(18,2)  NULL,
+  Cost_Deviation           DECIMAL(18,2)  NULL,
+  Manufacturing_costs      DECIMAL(18,2)  NULL,
+  Shipping_costs           DECIMAL(18,2)  NULL,
+  Net_profit               DECIMAL(18,2)  NULL,
+
+  Stock_levels             INT            NULL,
+  Production_volumes       INT            NULL,
+
+  Manufacturing_lead_time  INT            NULL,
+  Lead_time                INT            NULL,
+  Shipping_times           INT            NULL,
+  Lead_times               INT            NULL,
+  Delay                    INT            NULL,
+
+  Defect_rates             DECIMAL(9,4)   NULL,
+
+  CONSTRAINT FK_Fact_Product   FOREIGN KEY (Product_Key)  REFERENCES dbo.Dim_Product(Product_Key),
+  CONSTRAINT FK_Fact_Supplier  FOREIGN KEY (Supplier_Key) REFERENCES dbo.Dim_Supplier(Supplier_Key),
+  CONSTRAINT FK_Fact_Customer  FOREIGN KEY (Customer_Key) REFERENCES dbo.Dim_Customer(Customer_Key),
+  CONSTRAINT FK_Fact_Shipping  FOREIGN KEY (Shipping_Key) REFERENCES dbo.Dim_Shipping(Shipping_Key),
+  CONSTRAINT FK_Fact_Date      FOREIGN KEY (Date_Key)     REFERENCES dbo.Dim_Date(Date_Key)
+);
+
+-- ????? ?????? ?????
+CREATE INDEX IX_Fact_Product   ON dbo.Fact_SupplyChain(Product_Key);
+CREATE INDEX IX_Fact_Supplier  ON dbo.Fact_SupplyChain(Supplier_Key);
+CREATE INDEX IX_Fact_Customer  ON dbo.Fact_SupplyChain(Customer_Key);
+CREATE INDEX IX_Fact_Shipping  ON dbo.Fact_SupplyChain(Shipping_Key);
+CREATE INDEX IX_Fact_Date      ON dbo.Fact_SupplyChain(Date_Key);
+
+-- ??????? ?? ???View
+INSERT INTO dbo.Fact_SupplyChain (
+  Product_Key, Supplier_Key, Customer_Key, Shipping_Key, Date_Key,
+  Number_of_products_sold, Order_quantities, Price,
+  Revenue_generated, Expected_Revenue, Revenue_Deviation,
+  Costs, Expected_Costs, Cost_Deviation,
+  Manufacturing_costs, Shipping_costs, Net_profit,
+  Stock_levels, Production_volumes,
+  Manufacturing_lead_time, Lead_time, Shipping_times, Lead_times, Delay,
+  Defect_rates
+)
+SELECT
+  Product_Key, Supplier_Key, Customer_Key, Shipping_Key, Date_Key,
+  T.Number_of_products_sold, T.Order_quantities, T.Price,
+  T.Revenue_generated, T.Expected_Revenue, T.Revenue_Deviation,
+  T.Costs, T.Expected_Costs, T.Cost_Deviation,
+  T.Manufacturing_costs, T.Shipping_costs, T.Net_profit,
+  T.Stock_levels, T.Production_volumes,
+  T.Manufacturing_lead_time, T.Lead_time, T.Shipping_times, T.Lead_times, T.Delay,
+  T.Defect_rates
+FROM dbo.vw_MyTable_WithKeys AS T;
+
+COMMIT TRAN;
+
+------------------------------------------------------------
+-- 4) ???? ????
+------------------------------------------------------------
+SELECT 
+  (SELECT COUNT(*) FROM dbo.Dim_Product)   AS dim_product_rows,
+  (SELECT COUNT(*) FROM dbo.Dim_Supplier)  AS dim_supplier_rows,
+  (SELECT COUNT(*) FROM dbo.Dim_Customer)  AS dim_customer_rows,
+  (SELECT COUNT(*) FROM dbo.Dim_Shipping)  AS dim_shipping_rows,
+  (SELECT COUNT(*) FROM dbo.Dim_Date)      AS dim_date_rows,
+  (SELECT COUNT(*) FROM dbo.Fact_SupplyChain) AS fact_rows;
+
+
+
+
+
+
+
+
+
+
+
+
+  -- 1) ?????? ???Fact ???? ??????? (?? ???? NULL)
+SELECT 
+  SUM(CASE WHEN Product_Key  IS NULL THEN 1 ELSE 0 END) AS null_prod,
+  SUM(CASE WHEN Supplier_Key IS NULL THEN 1 ELSE 0 END) AS null_sup,
+  SUM(CASE WHEN Customer_Key IS NULL THEN 1 ELSE 0 END) AS null_cust,
+  SUM(CASE WHEN Shipping_Key IS NULL THEN 1 ELSE 0 END) AS null_ship,
+  SUM(CASE WHEN Date_Key     IS NULL THEN 1 ELSE 0 END) AS null_date
+FROM dbo.Fact_SupplyChain;
+
+-- 2) ????? ?????????? ?? MyTable (????? ???????)
+SELECT 
+  (SELECT SUM(Revenue_generated) FROM dbo.MyTable)        AS sum_src_rev,
+  (SELECT SUM(Revenue_generated) FROM dbo.Fact_SupplyChain) AS sum_fact_rev,
+  (SELECT SUM(Costs) FROM dbo.MyTable)                    AS sum_src_costs,
+  (SELECT SUM(Costs) FROM dbo.Fact_SupplyChain)           AS sum_fact_costs;
+
+-- 3) ?? ?????? ?? ??? ???????
+SELECT 
+  (SELECT COUNT(*) FROM dbo.MyTable)          AS rows_src,
+  (SELECT COUNT(*) FROM dbo.Fact_SupplyChain) AS rows_fact;
+
+
+
+
+
+
+
+
+
+
+
+  IF @@TRANCOUNT > 0
+BEGIN
+  WHILE @@TRANCOUNT > 0 ROLLBACK TRAN;
+END
+SET IMPLICIT_TRANSACTIONS OFF;
+
+
+
+USE master;
+BACKUP DATABASE SupplyChainDB
+TO DISK = 'F:\course\SupplyChainDB_Final.bak'
+WITH INIT,
+     NAME = 'SupplyChainDB - Final Backup (Dims+Fact)',
+     CHECKSUM,
+     STATS = 10;
+
+
+
+
+
+
+RESTORE VERIFYONLY 
+FROM DISK = 'F:\course\SupplyChainDB_Final.bak'
+WITH CHECKSUM;
+
+
+
+RESTORE FILELISTONLY 
+FROM DISK = 'F:\course\SupplyChainDB_Final.bak';

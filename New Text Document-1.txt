@@ -1,0 +1,837 @@
+-- 1) ما هي المنتجات الأكثر مبيعًا بناءً على Number_of_products_sold؟
+SELECT p.SKU, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY total_sold DESC;
+
+-- 2) ما متوسط السعر Price لكل فئة Product_type؟
+SELECT p.Product_type, AVG(f.Price) AS avg_price
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.Product_type
+ORDER BY avg_price DESC;
+
+-- 3) أي SKU يحقق أعلى Revenue_generated؟
+SELECT TOP(1) p.SKU, SUM(f.Revenue_generated) AS total_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY total_revenue DESC;
+
+-- 4) ما هو صافي الربح Net_profit لكل نوع Product_type؟
+SELECT p.Product_type, SUM(f.Net_profit) AS total_net_profit
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.Product_type
+ORDER BY total_net_profit DESC;
+
+-- 5) Expected_Revenue vs Revenue_generated per product (difference)
+SELECT p.SKU,
+       SUM(f.Expected_Revenue) AS expected_revenue,
+       SUM(f.Revenue_generated) AS actual_revenue,
+       SUM(f.Revenue_generated) - SUM(f.Expected_Revenue) AS revenue_diff
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY revenue_diff DESC;
+
+-- 6) Which products have the highest Defect_rates?
+SELECT p.SKU, AVG(f.Defect_rates) AS avg_defect_rate
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_defect_rate DESC;
+
+-- 7) Compare Order_quantities vs Production_volumes for each product
+SELECT p.SKU,
+       SUM(f.Order_quantities) AS total_orders,
+       SUM(f.Production_volumes) AS total_production,
+       SUM(f.Order_quantities) - SUM(f.Production_volumes) AS order_minus_production
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY order_minus_production DESC;
+
+-- 8) Products with critically low Stock_levels (threshold < 10)
+SELECT p.SKU, AVG(f.Stock_levels) AS avg_stock
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+HAVING AVG(f.Stock_levels) < 10
+ORDER BY avg_stock ASC;
+
+-- 9) SKUs generating negative Net_profit
+SELECT p.SKU, SUM(f.Net_profit) AS total_net
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+HAVING SUM(f.Net_profit) < 0
+ORDER BY total_net ASC;
+
+-- 10) Products with the highest Revenue_Deviation
+SELECT p.SKU, AVG(f.Revenue_Deviation) AS avg_rev_dev
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_rev_dev DESC;
+
+-- 11) Correlation (Pearson) between Price and Number_of_products_sold (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Price AS FLOAT)) AS avg_x,
+         AVG(CAST(Number_of_products_sold AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Price AS FLOAT)-a.avg_x)*(CAST(Number_of_products_sold AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Price AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Number_of_products_sold AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS price_sales_pearson_r
+FROM stats;
+
+-- 12) Monthly sales by Product_type
+SELECT d.Year, d.Month, p.Product_type, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month, p.Product_type
+ORDER BY d.Year, d.Month, p.Product_type;
+
+-- 13) Seasonal sales pattern per Product_type (sales by month)
+SELECT p.Product_type, d.Month, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY p.Product_type, d.Month
+ORDER BY p.Product_type, d.Month;
+
+-- 14) SKUs with highest Manufacturing_lead_time
+SELECT p.SKU, AVG(f.Manufacturing_lead_time) AS avg_mfg_lead
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_mfg_lead DESC;
+
+-- 15) Correlation: Manufacturing_costs vs Net_profit (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Manufacturing_costs AS FLOAT)) AS avg_x,
+         AVG(CAST(Net_profit AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Manufacturing_costs AS FLOAT)-a.avg_x)*(CAST(Net_profit AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Manufacturing_costs AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Net_profit AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS manufcost_netprofit_pearson_r
+FROM stats;
+
+-- 16) Suppliers with highest Order_quantities
+SELECT s.Supplier_name, SUM(f.Order_quantities) AS total_orders
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY total_orders DESC;
+
+-- 17) Suppliers contributing to highest Net_profit
+SELECT s.Supplier_name, SUM(f.Net_profit) AS total_net_profit
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY total_net_profit DESC;
+
+-- 18) Effect of supplier Location on Lead_time (avg)
+SELECT s.Location, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Location
+ORDER BY avg_lead_time;
+
+-- 19) Suppliers with highest Cost_Deviation
+SELECT s.Supplier_name, AVG(f.Cost_Deviation) AS avg_cost_dev
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_cost_dev DESC;
+
+-- 20) Expected_Costs vs Manufacturing_costs by Supplier
+SELECT s.Supplier_name, SUM(f.Expected_Costs) AS total_expected_costs, SUM(f.Manufacturing_costs) AS total_manufacturing_costs
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY total_manufacturing_costs DESC;
+
+-- 21) Suppliers causing the most Delay
+SELECT s.Supplier_name, SUM(f.Delay) AS total_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY total_delay DESC;
+
+-- 22) Supplier impact on Number_of_products_sold
+SELECT s.Supplier_name, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY total_sold DESC;
+
+-- 23) Average Defect_rates per Supplier
+SELECT s.Supplier_name, AVG(f.Defect_rates) AS avg_defect_rate
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_defect_rate DESC;
+
+-- 24) Effect of supplier Location on Shipping_times
+SELECT s.Location, AVG(f.Shipping_times) AS avg_shipping_time
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Location
+ORDER BY avg_shipping_time;
+
+-- 25) Supplier contributing highest Revenue_generated
+SELECT TOP(1) s.Supplier_name, SUM(f.Revenue_generated) AS total_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY total_revenue DESC;
+
+-- 26) Customer demographics generating highest Revenue
+SELECT c.Customer_demographics, SUM(f.Revenue_generated) AS total_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY total_revenue DESC;
+
+-- 27) Average Number_of_products_sold per demographic
+SELECT c.Customer_demographics, AVG(f.Number_of_products_sold) AS avg_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY avg_sold DESC;
+
+-- 28) Demographics with highest order frequency (count)
+SELECT c.Customer_demographics, COUNT(*) AS order_count
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY order_count DESC;
+
+-- 29) Top customers by Net_profit
+SELECT TOP(20) c.Customer_Key, c.Customer_demographics, SUM(f.Net_profit) AS total_net
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_Key, c.Customer_demographics
+ORDER BY total_net DESC;
+
+-- 30) Customer purchasing changes by Year (sales per year per demographic)
+SELECT d.Year, c.Customer_demographics, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, c.Customer_demographics
+ORDER BY d.Year, total_sold DESC;
+
+-- 31) Are certain demographics more price-sensitive? (avg price per demographic)
+SELECT c.Customer_demographics, AVG(f.Price) AS avg_price, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY avg_price;
+
+-- 32) Demographic groups with highest Order_quantities
+SELECT c.Customer_demographics, SUM(f.Order_quantities) AS total_orders
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY total_orders DESC;
+
+-- 33) Customer demographics preferring Product_types
+SELECT c.Customer_demographics, p.Product_type, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY c.Customer_demographics, p.Product_type
+ORDER BY c.Customer_demographics, total_sold DESC;
+
+-- 34) Do Defect_rates vary by customer demographics?
+SELECT c.Customer_demographics, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY avg_defect DESC;
+
+-- 35) Do certain customer groups experience more Delay?
+SELECT c.Customer_demographics, AVG(f.Delay) AS avg_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY avg_delay DESC;
+
+-- 36) Shipping carriers with fastest Shipping_times
+SELECT sh.Shipping_carriers, AVG(f.Shipping_times) AS avg_shipping_time
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Shipping_carriers
+ORDER BY avg_shipping_time ASC;
+
+-- 37) Compare Shipping_times across Transportation_modes
+SELECT sh.Transportation_modes, AVG(f.Shipping_times) AS avg_shipping_time
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Transportation_modes
+ORDER BY avg_shipping_time ASC;
+
+-- 38) Routes that cause the most Delay
+SELECT sh.Routes, SUM(f.Delay) AS total_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Routes
+ORDER BY total_delay DESC;
+
+-- 39) Shipping carrier with lowest Shipping_costs (avg)
+SELECT sh.Shipping_carriers, AVG(f.Shipping_costs) AS avg_shipping_cost
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Shipping_carriers
+ORDER BY avg_shipping_cost ASC;
+
+-- 40) Compare Shipping_costs across Transportation_modes
+SELECT sh.Transportation_modes, AVG(f.Shipping_costs) AS avg_shipping_cost
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Transportation_modes
+ORDER BY avg_shipping_cost ASC;
+
+-- 41) Shipping_carrier linked to highest Revenue_generated shipments
+SELECT sh.Shipping_carriers, SUM(f.Revenue_generated) AS total_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Shipping_carriers
+ORDER BY total_revenue DESC;
+
+-- 42) Routes with highest Defect_rates
+SELECT sh.Routes, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Routes
+ORDER BY avg_defect DESC;
+
+-- 43) Lead_time by Transportation_mode
+SELECT sh.Transportation_modes, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Transportation_modes
+ORDER BY avg_lead_time DESC;
+
+-- 44) Correlation: Shipping_times vs Net_profit (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Shipping_times AS FLOAT)) AS avg_x,
+         AVG(CAST(Net_profit AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Shipping_times AS FLOAT)-a.avg_x)*(CAST(Net_profit AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Shipping_times AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Net_profit AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS shippingtime_netprofit_r
+FROM stats;
+
+-- 45) Shipping_costs by Quarter
+SELECT d.Year, DATEPART(QUARTER, d.Date) AS Quarter, SUM(f.Shipping_costs) AS total_shipping_costs
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, DATEPART(QUARTER, d.Date)
+ORDER BY d.Year, Quarter;
+
+-- 46) Carrier serving the largest customer base (distinct customers)
+SELECT sh.Shipping_carriers, COUNT(DISTINCT f.Customer_Key) AS distinct_customers
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Shipping_carriers
+ORDER BY distinct_customers DESC;
+
+-- 47) Average Shipping_times by Month
+SELECT d.Year, d.Month, AVG(f.Shipping_times) AS avg_shipping_time
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month
+ORDER BY d.Year, d.Month;
+
+-- 48) Transportation_modes causing highest Delay
+SELECT sh.Transportation_modes, SUM(f.Delay) AS total_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Transportation_modes
+ORDER BY total_delay DESC;
+
+-- 49) Shipping_carrier performance across Years (avg shipping time and delays)
+SELECT d.Year, sh.Shipping_carriers,
+       AVG(f.Shipping_times) AS avg_shipping_time,
+       SUM(f.Delay) AS total_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, sh.Shipping_carriers
+ORDER BY d.Year, sh.Shipping_carriers;
+
+-- 50) Routes with highest Cost_Deviation
+SELECT sh.Routes, AVG(f.Cost_Deviation) AS avg_cost_dev
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Routes
+ORDER BY avg_cost_dev DESC;
+
+-- 51) Revenue_generated by Month and Year
+SELECT d.Year, d.Month, SUM(f.Revenue_generated) AS total_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month
+ORDER BY d.Year, d.Month;
+
+-- 52) Year-over-Year product sales (sum by year)
+SELECT d.Year, p.SKU, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, p.SKU
+ORDER BY p.SKU, d.Year;
+
+-- 53) Quarters with highest Defect_rates
+SELECT d.Year, DATEPART(QUARTER, d.Date) AS Quarter, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, DATEPART(QUARTER, d.Date)
+ORDER BY avg_defect DESC;
+
+-- 54) Months with lowest Net_profit
+SELECT d.Year, d.Month, SUM(f.Net_profit) AS total_net_profit
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month
+ORDER BY total_net_profit ASC;
+
+-- 55) Sales trends by WeekOfYear
+SELECT d.Year, d.WeekOfYear, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.WeekOfYear
+ORDER BY d.Year, d.WeekOfYear;
+
+-- 56) Most popular shipping days (Day)
+SELECT d.Day, SUM(f.Number_of_products_sold) AS total_sold
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Day
+ORDER BY total_sold DESC;
+
+-- 57) Compare Costs across Years
+SELECT d.Year, SUM(f.Costs) AS total_costs, SUM(f.Manufacturing_costs) AS total_manufacturing_costs
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year
+ORDER BY d.Year;
+
+-- 58) Is Lead_time improving Year-over-Year? (avg lead_time per year)
+SELECT d.Year, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year
+ORDER BY d.Year;
+
+-- 59) Seasonal trends in Order_quantities (by month)
+SELECT d.Month, SUM(f.Order_quantities) AS total_orders
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Month
+ORDER BY d.Month;
+
+-- 60) Expected_Revenue vs Revenue_generated by Year
+SELECT d.Year, SUM(f.Expected_Revenue) AS expected_revenue, SUM(f.Revenue_generated) AS actual_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year
+ORDER BY d.Year;
+
+-- 61) Manufacturing_lead_time patterns across Months
+SELECT d.Year, d.Month, AVG(f.Manufacturing_lead_time) AS avg_mfg_lead
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month
+ORDER BY d.Year, d.Month;
+
+-- 62) Weeks with highest Order_quantities
+SELECT d.Year, d.WeekOfYear, SUM(f.Order_quantities) AS total_orders
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.WeekOfYear
+ORDER BY total_orders DESC;
+
+-- 63) Compare Shipping_costs in Q1 vs Q4
+SELECT d.Year,
+       SUM(CASE WHEN DATEPART(QUARTER, d.Date) = 1 THEN f.Shipping_costs ELSE 0 END) AS Q1_shipping_costs,
+       SUM(CASE WHEN DATEPART(QUARTER, d.Date) = 4 THEN f.Shipping_costs ELSE 0 END) AS Q4_shipping_costs
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year
+ORDER BY d.Year;
+
+-- 64) Months with highest Delay occurrences
+SELECT d.Year, d.Month, SUM(f.Delay) AS total_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month
+ORDER BY total_delay DESC;
+
+-- 65) Year-over-Year changes in Production_volumes
+SELECT d.Year, SUM(f.Production_volumes) AS total_production
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year
+ORDER BY d.Year;
+
+-- 66) Products with highest Manufacturing_costs
+SELECT p.SKU, SUM(f.Manufacturing_costs) AS total_manufacturing_costs
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY total_manufacturing_costs DESC;
+
+-- 67) Items with highest Cost_Deviation
+SELECT p.SKU, AVG(f.Cost_Deviation) AS avg_cost_dev
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_cost_dev DESC;
+
+-- 68) Cost_Deviation by Supplier
+SELECT s.Supplier_name, AVG(f.Cost_Deviation) AS avg_cost_dev
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_cost_dev DESC;
+
+-- 69) Product_type with highest Net_profit
+SELECT p.Product_type, SUM(f.Net_profit) AS total_net
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.Product_type
+ORDER BY total_net DESC;
+
+-- 70) Compare Shipping_costs to Revenue_generated (cost-efficiency per SKU)
+SELECT p.SKU,
+       SUM(f.Shipping_costs) AS total_shipping_costs,
+       SUM(f.Revenue_generated) AS total_revenue,
+       CASE WHEN SUM(f.Revenue_generated)=0 THEN NULL ELSE SUM(f.Shipping_costs)*1.0/SUM(f.Revenue_generated) END AS shipping_to_revenue_ratio
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY shipping_to_revenue_ratio DESC;
+
+-- 71) Are Expected_Costs consistently lower than actual Costs?
+SELECT AVG(CASE WHEN f.Expected_Costs < f.Costs THEN 1.0 ELSE 0 END) AS pct_expected_less_than_actual
+FROM Fact_SupplyChain f;
+
+-- 72) Correlation: Production_volumes vs Manufacturing_costs (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Production_volumes AS FLOAT)) AS avg_x,
+         AVG(CAST(Manufacturing_costs AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Production_volumes AS FLOAT)-a.avg_x)*(CAST(Manufacturing_costs AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Production_volumes AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Manufacturing_costs AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS prodvol_manufcost_r
+FROM stats;
+
+-- 73) Identify low-margin products (Net_profit / Revenue_generated)
+SELECT p.SKU,
+       SUM(f.Net_profit) AS total_net,
+       SUM(f.Revenue_generated) AS total_revenue,
+       CASE WHEN SUM(f.Revenue_generated)=0 THEN NULL ELSE SUM(f.Net_profit)*1.0/SUM(f.Revenue_generated) END AS margin
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY margin ASC;
+
+-- 74) Profitability across Customer demographics
+SELECT c.Customer_demographics, SUM(f.Net_profit) AS total_net
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY total_net DESC;
+
+-- 75) Correlation: Shipping_costs vs Net_profit (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Shipping_costs AS FLOAT)) AS avg_x,
+         AVG(CAST(Net_profit AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Shipping_costs AS FLOAT)-a.avg_x)*(CAST(Net_profit AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Shipping_costs AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Net_profit AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS shipcost_netprofit_r
+FROM stats;
+
+-- 76) Manufacturing_costs comparison across Suppliers
+SELECT s.Supplier_name, AVG(f.Manufacturing_costs) AS avg_manuf_cost
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_manuf_cost DESC;
+
+-- 77) Products where Expected_Revenue significantly exceeds actual Revenue
+SELECT p.SKU,
+       SUM(f.Expected_Revenue) AS expected_revenue,
+       SUM(f.Revenue_generated) AS actual_revenue,
+       SUM(f.Expected_Revenue) - SUM(f.Revenue_generated) AS missing_revenue
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY missing_revenue DESC;
+
+-- 78) Stock_levels and inventory costs (simple view)
+SELECT p.SKU, AVG(f.Stock_levels) AS avg_stock, SUM(f.Costs) AS total_costs
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_stock DESC;
+
+-- 79) Correlation: Production_volumes vs Costs (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Production_volumes AS FLOAT)) AS avg_x,
+         AVG(CAST(Costs AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Production_volumes AS FLOAT)-a.avg_x)*(CAST(Costs AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Production_volumes AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Costs AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS prodvol_costs_r
+FROM stats;
+
+-- 80) Compare Cost_Deviation across quarters
+SELECT d.Year, DATEPART(QUARTER, d.Date) AS Quarter, AVG(f.Cost_Deviation) AS avg_cost_dev
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, DATEPART(QUARTER, d.Date)
+ORDER BY d.Year, Quarter;
+
+-- 81) Products with highest Defect_rates
+SELECT p.SKU, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_defect DESC;
+
+-- 82) Suppliers linked to high Defect_rates
+SELECT s.Supplier_name, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_defect DESC;
+
+-- 83) Compare Defect_rates across Transportation_modes
+SELECT sh.Transportation_modes, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Transportation_modes
+ORDER BY avg_defect DESC;
+
+-- 84) Defect_rates month-over-month
+SELECT d.Year, d.Month, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, d.Month
+ORDER BY d.Year, d.Month;
+
+-- 85) Correlation: Lead_time vs Defect_rates (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Lead_time AS FLOAT)) AS avg_x,
+         AVG(CAST(Defect_rates AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Lead_time AS FLOAT)-a.avg_x)*(CAST(Defect_rates AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Lead_time AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Defect_rates AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS leadtime_defect_r
+FROM stats;
+
+-- 86) Routes causing highest Defect_rates
+SELECT sh.Routes, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Routes
+ORDER BY avg_defect DESC;
+
+-- 87) Defect_rates by Customer demographic
+SELECT c.Customer_demographics, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Customer c       ON f.Customer_Key = c.Customer_Key
+GROUP BY c.Customer_demographics
+ORDER BY avg_defect DESC;
+
+-- 88) Defect_rates by Product_type
+SELECT p.Product_type, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.Product_type
+ORDER BY avg_defect DESC;
+
+-- 89) Correlation: Delay vs Defect_rates (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Delay AS FLOAT)) AS avg_x,
+         AVG(CAST(Defect_rates AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Delay AS FLOAT)-a.avg_x)*(CAST(Defect_rates AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Delay AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Defect_rates AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS delay_defect_r
+FROM stats;
+
+-- 90) Suppliers with consistently low Defect_rates (top 10 lowest)
+SELECT TOP(10) s.Supplier_name, AVG(f.Defect_rates) AS avg_defect
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_defect ASC;
+
+-- 91) Correlation: Lead_time vs Production_volumes (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Lead_time AS FLOAT)) AS avg_x,
+         AVG(CAST(Production_volumes AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Lead_time AS FLOAT)-a.avg_x)*(CAST(Production_volumes AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Lead_time AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Production_volumes AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS leadtime_prodvol_r
+FROM stats;
+
+-- 92) Routes associated with highest Lead_time
+SELECT sh.Routes, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Routes
+ORDER BY avg_lead_time DESC;
+
+-- 93) Manufacturing_lead_time by Supplier
+SELECT s.Supplier_name, AVG(f.Manufacturing_lead_time) AS avg_mfg_lead
+FROM Fact_SupplyChain f
+JOIN Dim_Supplier s       ON f.Supplier_Key = s.Supplier_Key
+GROUP BY s.Supplier_name
+ORDER BY avg_mfg_lead DESC;
+
+-- 94) Relationship between Delay and Transportation_modes
+SELECT sh.Transportation_modes, AVG(f.Delay) AS avg_delay
+FROM Fact_SupplyChain f
+JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+GROUP BY sh.Transportation_modes
+ORDER BY avg_delay DESC;
+
+-- 95) Products requiring the longest Lead_time
+SELECT p.SKU, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_lead_time DESC;
+
+-- 96) Lead_time by Quarter for operational insights
+SELECT d.Year, DATEPART(QUARTER, d.Date) AS Quarter, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year, DATEPART(QUARTER, d.Date)
+ORDER BY d.Year, Quarter;
+
+-- 97) Correlation: Lead_time vs Revenue_generated (SQL Server-compatible)
+WITH avgs AS (
+  SELECT AVG(CAST(Lead_time AS FLOAT)) AS avg_x,
+         AVG(CAST(Revenue_generated AS FLOAT)) AS avg_y
+  FROM Fact_SupplyChain
+),
+stats AS (
+  SELECT
+    SUM((CAST(Lead_time AS FLOAT)-a.avg_x)*(CAST(Revenue_generated AS FLOAT)-a.avg_y)) AS covar_sum,
+    SUM(POWER(CAST(Lead_time AS FLOAT)-a.avg_x,2)) AS var_x_sum,
+    SUM(POWER(CAST(Revenue_generated AS FLOAT)-a.avg_y,2)) AS var_y_sum
+  FROM Fact_SupplyChain f CROSS JOIN avgs a
+)
+SELECT CASE WHEN var_x_sum=0 OR var_y_sum=0 THEN NULL
+            ELSE covar_sum / SQRT(var_x_sum * var_y_sum) END AS leadtime_revenue_r
+FROM stats;
+
+-- 98) Are Shipping_times improving over time? (avg per year)
+SELECT d.Year, AVG(f.Shipping_times) AS avg_shipping_time
+FROM Fact_SupplyChain f
+JOIN Dim_Date d           ON f.Date_Key = d.Date_Key
+GROUP BY d.Year
+ORDER BY d.Year;
+
+-- 99) Compare Lead_time across SKUs
+SELECT p.SKU, AVG(f.Lead_time) AS avg_lead_time
+FROM Fact_SupplyChain f
+JOIN Dim_Product p        ON f.Product_Key = p.Product_Key
+GROUP BY p.SKU
+ORDER BY avg_lead_time DESC;
+
+-- 100) Identify major supply chain bottlenecks using Delay + Defect_rates + Lead_time (score per Route)
+WITH route_metrics AS (
+  SELECT sh.Routes,
+         AVG(f.Delay) AS avg_delay,
+         AVG(f.Defect_rates) AS avg_defect,
+         AVG(f.Lead_time) AS avg_lead_time
+  FROM Fact_SupplyChain f
+  JOIN Dim_Shipping sh      ON f.Shipping_Key = sh.Shipping_Key
+  GROUP BY sh.Routes
+),
+max_vals AS (
+  SELECT MAX(avg_delay) AS max_delay, MAX(avg_defect) AS max_defect, MAX(avg_lead_time) AS max_lead
+  FROM route_metrics
+)
+SELECT r.Routes, r.avg_delay, r.avg_defect, r.avg_lead_time,
+       (CASE WHEN m.max_delay=0 THEN 0 ELSE r.avg_delay*1.0/m.max_delay END
+      +CASE WHEN m.max_defect=0 THEN 0 ELSE r.avg_defect*1.0/m.max_defect END
+      +CASE WHEN m.max_lead=0 THEN 0 ELSE r.avg_lead_time*1.0/m.max_lead END) AS bottleneck_score
+FROM route_metrics r CROSS JOIN max_vals m
+ORDER BY bottleneck_score DESC;
